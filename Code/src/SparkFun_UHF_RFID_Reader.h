@@ -167,6 +167,7 @@ class RFID
 	uint8_t getTagEPCBytesNew(void);
 	int8_t getTagRSSINew(void);
 	int8_t getAntennaeIDNew(void);
+  int8_t getEPCHeader(void);
 
 
   private:
