@@ -961,3 +961,8 @@ int8_t RFID::getEPCHeader(void)
 {
 	return msg[37];
 }
+
+int8_t RFID::getFertigateTag(void)
+{
+	return msg[38];
+}
