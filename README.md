@@ -11,14 +11,14 @@ BOM
   
 Code
 
-  -Adafruit_Logging
+  - Adafruit_Logging
   
       - Contains the most up-to-date Adafruit STEMMA Soil Moisture firmware code
       
-  -Implementation
+  - Implementation
   
       - Contains the Feather M0 port of firmware for the RFID Sensor
-  -src
+  - src
   
       -Includes all dependencies needed to compile the above .ino files
       
