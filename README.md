@@ -13,14 +13,14 @@ Code
 
   - Adafruit_Logging
   
-      - Contains the most up-to-date Adafruit STEMMA Soil Moisture firmware code
+        - Contains the most up-to-date Adafruit STEMMA Soil Moisture firmware code
       
   - Implementation
   
-      - Contains the Feather M0 port of firmware for the RFID Sensor
+        - Contains the Feather M0 port of firmware for the RFID Sensor
   - src
   
-      -Includes all dependencies needed to compile the above .ino files
+        - Includes all dependencies needed to compile the above .ino files
       
 Hardware
 
