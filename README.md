@@ -6,7 +6,8 @@ Directory information:
 
 
 BOM
-  - Contains the most up-to-date BOM of the overall project
+
+    - Contains the most up-to-date BOM of the overall project
   
 Code
 
@@ -23,4 +24,4 @@ Code
       
 Hardware
 
-   -Contains .brd and .sch files of the RFID-Feather Interface Boards for communication with the Feather M0
+    -Contains .brd and .sch files of the RFID-Feather Interface Boards for communication with the Feather M0
