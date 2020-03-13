@@ -11,6 +11,10 @@
   switch is in the 'SW-UART' position
 */
 
+//TODO: clean up relay_switch function so that toggling is not necessary for each iteration
+//		  of state machine.
+//TODO: test fertigate functionality
+
 //#include <Loom.h>
 #include <Adafruit_NeoPixel.h>        // Library for NeoPixel functionality
 #include "wiring_private.h"           // pinPeripheral() function
@@ -20,6 +24,7 @@
 #define RELAY_SWITCH A0
 #define UART_TX 10
 #define UART_RX 11
+#define FERTIGATE_SWITCH A1
 
 #define NUMPIXELS 1
 #define NUM_TAGS 10
@@ -42,7 +47,7 @@ enum state_enum {
 typedef struct{
 
    byte EPCHeaderName;
-   uint8_t fertigate;
+   byte fertigate;
    uint8_t threshold;
    uint8_t state = COMPARE_THRESHOLD;
    int rssi;
@@ -54,24 +59,25 @@ typedef struct{
 
 tag tag_array[NUM_TAGS];      //global array for tag objects
 int current_num_tags = 0;     //global counter for current number of tags
+uint8_t fertigate_state = 0;	//global variable for the state of fertigate pass
 
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, NEOPIXEL, NEO_GRB + NEO_KHZ800);
 
-/*
-const char* json_config = 
-#include "config.h"
-;
-// Set enabled modules
-LoomFactory<
-  Enable::Internet::Disabled,
-  Enable::Sensors::Enabled,
-  Enable::Radios::Disabled,
-  Enable::Actuators::Disabled,
-  Enable::Max::Disabled
-> ModuleFactory{};
 
-LoomManager Loom{ &ModuleFactory };
-*/
+//const char* json_config = 
+//#include "config.h"
+//;
+//// Set enabled modules
+//LoomFactory<
+//  Enable::Internet::Disabled,
+//  Enable::Sensors::Enabled,
+//  Enable::Radios::Disabled,
+//  Enable::Actuators::Disabled,
+//  Enable::Max::Disabled
+//> ModuleFactory{};
+//
+//LoomManager Loom{ &ModuleFactory };
+
 
 //Tx ---> 10
 //Rx ---> 11
@@ -103,6 +109,7 @@ void setup()
 //  LPrintln("\n ** Setup Complete ** ");
 
 	pinMode(RELAY_SWITCH, OUTPUT);
+	pinMode(FERTIGATE_SWITCH, INPUT_PULLUP);
   
 	pixels.begin();
 	setColor(-1, -1);
@@ -122,18 +129,18 @@ void setup()
 	
 	 if (setupNano(115200) == false) //Configure nano to run at 38400bps
 	 {
-	   Serial.println(F("Module failed to respond. Please check wiring."));
+	 	Serial.println(F("Module failed to respond. Please check wiring."));
 	   for(int j = 0; j < 5; j ++){
-	     for(int i = 0; i < NUMPIXELS; i++){
-	       pixels.setPixelColor(i, pixels.Color(150, 150, 150));
-	       pixels.show();  
-	     }
-	     delay(300);
-	     for(int i = 0; i < NUMPIXELS; i++){
-	       pixels.setPixelColor(i, pixels.Color(0, 0, 0));
-	       pixels.show();  
-	     }
-	     delay(300);
+	   	for(int i = 0; i < NUMPIXELS; i++){
+	      	pixels.setPixelColor(i, pixels.Color(150, 150, 150));
+	      	pixels.show();  
+	     	}
+	   	delay(300);
+	     	for(int i = 0; i < NUMPIXELS; i++){
+	       	pixels.setPixelColor(i, pixels.Color(0, 0, 0));
+	       	pixels.show();  
+	     	}
+	     	delay(300);
 	   }
 	
 	   delay(10000);
@@ -157,70 +164,73 @@ void setup()
 boolean setupNano(long baudRate)
 {
 
-  delay(200);
-  nano.enableDebugging();
-
-  nano.begin(rfidSerial);
-
-  //Test to see if we are already connected to a module
-  //This would be the case if the Arduino has been reprogrammed and the module has stayed powered
-  while(!rfidSerial); //Wait for port to open
-
-  //About 200ms from power on the module will send its firmware version at 115200. We need to ignore this.
-  
-   while(rfidSerial.available()) rfidSerial.read();
-   delay(100);
-  
-  Serial.println("Getting Version...");
-  nano.getVersion();
-
-  if (nano.msg[0] == ERROR_WRONG_OPCODE_RESPONSE)
-  {
-    //This happens if the baud rate is correct but the module is doing a ccontinuous read
-    nano.stopReading();
-
-    Serial.println(F("Module continuously reading. Asking it to stop..."));
-
-    delay(1500);
-  }
-  else
-  {
-    //The module did not respond so assume it's just been powered on and communicating at 115200bps
-    Serial.println("Setting Baud...");
-    nano.setBaud(baudRate); //Tell the module to go to the chosen baud rate. Ignore the response msg
-
-   // rfidSerial.begin(baudRate); //Start the software serial port, this time at user's chosen baud rate
-  }
-
-  //Test the connection
-  Serial.println("Getting Version...");
-  nano.getVersion();
-
-  delay(200);
-
-  nano.getVersion();
-  
-  if (nano.msg[0] != ALL_GOOD){
-    Serial.println(nano.msg[0], HEX);
-    return (false); //Something is not right
-  }
-
-  Serial.println(nano.msg[0], HEX);
- 
-  Serial.println("Setting Tag Protocol...");
-  //The M6E has these settings no matter what
-  nano.setTagProtocol(); //Set protocol to GEN2
-
-  Serial.println("Setting Antenna Port...");
-  nano.setAntennaPort(); //Set TX/RX antenna ports to 1
-
-  nano.disableDebugging();
-
-  return (true); //We are ready to rock
+	delay(200);
+	nano.enableDebugging();
+	
+	nano.begin(rfidSerial);
+	
+	//Test to see if we are already connected to a module
+	//This would be the case if the Arduino has been reprogrammed and the module has stayed powered
+	while(!rfidSerial); //Wait for port to open
+	
+	//About 200ms from power on the module will send its firmware version at 115200. We need to ignore this.
+	
+	while(rfidSerial.available()) rfidSerial.read();
+	delay(100);
+	
+	Serial.println("Getting Version...");
+	nano.getVersion();
+	
+	if (nano.msg[0] == ERROR_WRONG_OPCODE_RESPONSE)
+	{
+	 	//This happens if the baud rate is correct but the module is doing a ccontinuous read
+	 	nano.stopReading();
+	
+	 	Serial.println(F("Module continuously reading. Asking it to stop..."));
+	
+	 	delay(1500);
+	}
+	else
+	{
+	 	//The module did not respond so assume it's just been powered on and communicating at 115200bps
+	 	Serial.println("Setting Baud...");
+	 	nano.setBaud(baudRate); //Tell the module to go to the chosen baud rate. Ignore the response msg
+	
+	// rfidSerial.begin(baudRate); //Start the software serial port, this time at user's chosen baud rate
+	}
+	
+	//Test the connection
+	Serial.println("Getting Version...");
+	nano.getVersion();
+	
+	delay(200);
+	
+	nano.getVersion();
+	
+	if (nano.msg[0] != ALL_GOOD){
+	 	Serial.println(nano.msg[0], HEX);
+	 	return (false); //Something is not right
+	}
+	
+	Serial.println(nano.msg[0], HEX);
+	
+	Serial.println("Setting Tag Protocol...");
+	//The M6E has these settings no matter what
+	nano.setTagProtocol(); //Set protocol to GEN2
+	
+	Serial.println("Setting Antenna Port...");
+	nano.setAntennaPort(); //Set TX/RX antenna ports to 1
+	
+	nano.disableDebugging();
+	
+	return (true); //We are ready to rock
 }
 
+//main loop of the program, calls the state machine for individual
+//tags upon successive tag responses
 void loop()
 {
+	readFertigateSwitch();
   if (nano.check() == true) //Check to see if any new data has come in from module
   {
     byte responseType = nano.parseResponse(); //Break response into tag ID, RSSI, frequency, and timestamp
@@ -232,28 +242,60 @@ void loop()
     else if (responseType == RESPONSE_IS_TAGFOUND)
     {
       //If we have a full record we can pull out the fun bits
-      rssi          = nano.getTagRSSINew(); //Get the RSSI for this tag read
-      freq          = nano.getTagFreqNew(); //Get the frequency this tag was detected at
+      rssi          = nano.getTagRSSINew(); 		//Get the RSSI for this tag read
+      freq          = nano.getTagFreqNew(); 		//Get the frequency this tag was detected at
       tagEPCBytes   = nano.getTagEPCBytesNew(); //Get the number of bytes of EPC from response
-      EPCHeader     = nano.getEPCHeader();
-      EPCFertigate  = nano.getFertigateTag();
-      moisture      = nano.getMoistureData();
+      EPCHeader     = nano.getEPCHeader();		//Get the EPC header for identification
+      EPCFertigate  = nano.getFertigateTag();	//Get the EPC fertigate code
+      moisture      = nano.getMoistureData();	//Get the moisture data of the current read
 
       if(freq < 1000000 && nano.getAntennaeIDNew() == 17 && tagEPCBytes <= 20){
 
-        for(int i = 0; i <= current_num_tags; i++){
-          if(tag_array[i].EPCHeaderName == EPCHeader){
-             //run state machine at i
-             updateData(i);
-             state_machine(i);  
-          }
-          else if(i == current_num_tags){
-            if(current_num_tags < NUM_TAGS){
-              addNewTag(i);
-              current_num_tags++;
-            }
-          }
-        }
+      	if(_debug_serial){
+      		Serial.print("Fertigate State: ");
+      		Serial.println(fertigate_state);	
+      	}
+
+			//checking the fertigate pass
+			//means that current sweep is not fertigate sweep
+      	if(!fertigate_state){
+
+      		 for(int i = 0; i <= current_num_tags; i++){
+		          if(tag_array[i].EPCHeaderName == EPCHeader){
+		             //run state machine at i
+		             updateData(i);
+		             state_machine(i);  
+		          }
+		          //no tag found, add in this new tag
+		          else if(i == current_num_tags){
+		            if(current_num_tags < NUM_TAGS){
+		              addNewTag(i);
+		              current_num_tags++;
+		            }
+		          }
+	        }
+      		
+      	}
+      	//we are in the fertigate sweep, do not call state machine on non-fertigate tags
+      	else{
+
+      			for(int i = 0; i <= current_num_tags; i++){
+      				if(tag_array[i].EPCHeaderName == EPCHeader && tag_array[i].fertigate == 0xFF){
+      					updateData(i);
+      					state_machine(i);	
+      				}
+      				//no tag found, add in this new tag
+      				else if(i == current_num_tags){
+      					if(current_num_tags < NUM_TAGS){
+      						addNewTag(i);
+      						current_num_tags++;	
+      					}	
+      				}
+      			}
+      		
+      	}
+
+        //reset timeout
         timeout_counter = 0;
 
         delay(100);
@@ -277,10 +319,11 @@ void loop()
 
       }
       else{
+      	//implement timeout function
         timeout_counter++;
         if(timeout_counter > 10){
           setColor(-1, -1);
-          }
+        }
       }
 
     }
@@ -300,25 +343,20 @@ void loop()
 //accordingly.
 //NOTE: DEBUG FUNCTION ONLY
 void setColor(int moisture, int rssi){
-
   if(moisture >= 0 && rssi >= RSSI_THRESHOLD){
-  
       if(moisture <= WET){
            for(int i = 0; i < NUMPIXELS; i++){
               pixels.setPixelColor(i, pixels.Color(0, 0, 150));
               pixels.show();
               strcpy(color, "blue");  
            }
-      
       }
       else if(moisture < DRY){
-        
            for(int i = 0; i < NUMPIXELS; i++){
               pixels.setPixelColor(i, pixels.Color(0, 150, 0));
               pixels.show();
               strcpy(color, "green");  
            }
-        
       }
       else{
           for(int i = 0; i < NUMPIXELS; i++){
@@ -326,19 +364,14 @@ void setColor(int moisture, int rssi){
               pixels.show();
               strcpy(color, "red");;  
            }  
-        
       }
   }
   else{
-
        for(int i = 0; i < NUMPIXELS; i++){
           pixels.setPixelColor(i, pixels.Color(0, 0, 0));
           pixels.show();  
-       }
-    
+       } 
   }
-  
-  
 }
 
 //Create a new struct tag object with a default initialization
@@ -364,10 +397,21 @@ void updateData(int i){
    tag_array[i].tagEPCBytes = tagEPCBytes;
 }
 
+//function that turns on the relay switch by pulsing high on
+//the GPIO
 void turnOnRelay(){
 	digitalWrite(RELAY_SWITCH, HIGH);
 	delay(200);
 	digitalWrite(RELAY_SWITCH, LOW);	
+}
+
+void readFertigateSwitch(){
+	if(digitalRead(FERTIGATE_SWITCH) == HIGH){
+		fertigate_state = 1;	
+	}
+	else{
+		fertigate_state = 0;	
+	}
 }
 
 //Irrigation state machine with three states: compare the threshold

@@ -12,7 +12,7 @@
 		},\
     {\
       'name':'SD',\
-      'params':[true, 1000, 13, 'test', true]\
+      'params':[true, 1000, 12, 'test', true]\
     },\
     {\
       'name':'DS3231',\
