@@ -46,6 +46,7 @@ void SERCOM1_Handler() {
 
 RFID nano; //Create instance
 char color[10];
+char EPCHeader_Hex[3];
 int counter = 0;
 
 void setup()
@@ -88,7 +89,7 @@ void setup()
         }
         delay(300);
       }
-      //while (1); //Freeze!
+      //while (11); //Freeze!
 
       delay(10000);
       goto StartOver;
@@ -97,7 +98,7 @@ void setup()
   
   nano.setRegion(REGION_NORTHAMERICA); //Set to North America
 
-  nano.setReadPower(1500); //5.00 dBm. Higher values may caues USB port to brown out
+  nano.setReadPower(2600); //5.00 dBm. Higher values may caues USB port to brown out
   //Max Read TX Power is 27.00 dBm and may cause temperature-limit throttling
 
   //Serial.println(F("Press a key to begin scanning for tags."));
@@ -159,12 +160,14 @@ void loop()
         }
         Serial.println(F("]"));
 
+        itoa(EPCHeader, EPCHeader_Hex, 16);
+
         Serial.println(EPCHeader);
 
         Loom.add_data("RFID", "RSSI", rssi);
         Loom.add_data("Frequency", "Frequency", freq);
         Loom.add_data("Moisture", "Moisture", moisture);
-        Loom.add_data("EPC", "EPC", EPCHeader);
+        Loom.add_data("EPC", "EPC", EPCHeader_Hex);
         Loom.add_data("Color", "Color", color);
         Loom.SDCARD().log();
         Loom.pause();
