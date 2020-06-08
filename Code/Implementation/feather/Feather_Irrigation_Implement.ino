@@ -20,11 +20,12 @@
 #include "wiring_private.h"           // pinPeripheral() function
 #include "SparkFun_UHF_RFID_Reader.h" // Library for controlling the M6E Nano module
 
-#define NEOPIXEL 5
+#define NEOPIXEL A1
 #define RELAY_SWITCH A0
 #define UART_TX 10
 #define UART_RX 11
-#define FERTIGATE_SWITCH A1
+#define FERTIGATE_SWITCH A2
+#define RELAY_RSSI_THRESHOLD -80
 
 #define NUMPIXELS 1
 #define NUM_TAGS 10
@@ -149,7 +150,7 @@ void setup()
 	
 	nano.setRegion(REGION_NORTHAMERICA); //Set to North America
 	
-	nano.setReadPower(1500); //5.00 dBm. Higher values may caues USB port to brown out
+	nano.setReadPower(2600); //5.00 dBm. Higher values may caues USB port to brown out
 	//Max Read TX Power is 27.00 dBm and may cause temperature-limit throttling
 	
 	//Serial.println(F("Press a key to begin scanning for tags."));
@@ -230,7 +231,7 @@ boolean setupNano(long baudRate)
 //tags upon successive tag responses
 void loop()
 {
-	readFertigateSwitch();
+	//readFertigateSwitch();
   if (nano.check() == true) //Check to see if any new data has come in from module
   {
     byte responseType = nano.parseResponse(); //Break response into tag ID, RSSI, frequency, and timestamp
@@ -251,14 +252,14 @@ void loop()
 
       if(freq < 1000000 && nano.getAntennaeIDNew() == 17 && tagEPCBytes <= 20){
 
-      	if(_debug_serial){
-      		Serial.print("Fertigate State: ");
-      		Serial.println(fertigate_state);	
-      	}
+//      	if(_debug_serial){
+//      		Serial.print("Fertigate State: ");
+//      		Serial.println(fertigate_state);	
+//      	}
 
 			//checking the fertigate pass
 			//means that current sweep is not fertigate sweep
-      	if(!fertigate_state){
+      	//if(!fertigate_state){
 
       		 for(int i = 0; i <= current_num_tags; i++){
 		          if(tag_array[i].EPCHeaderName == EPCHeader){
@@ -275,25 +276,25 @@ void loop()
 		          }
 	        }
       		
-      	}
+      	//}
       	//we are in the fertigate sweep, do not call state machine on non-fertigate tags
-      	else{
-
-      			for(int i = 0; i <= current_num_tags; i++){
-      				if(tag_array[i].EPCHeaderName == EPCHeader && tag_array[i].fertigate == 0xFF){
-      					updateData(i);
-      					state_machine(i);	
-      				}
-      				//no tag found, add in this new tag
-      				else if(i == current_num_tags){
-      					if(current_num_tags < NUM_TAGS){
-      						addNewTag(i);
-      						current_num_tags++;	
-      					}	
-      				}
-      			}
-      		
-      	}
+//      	else{
+//
+//      			for(int i = 0; i <= current_num_tags; i++){
+//      				if(tag_array[i].EPCHeaderName == EPCHeader && tag_array[i].fertigate == 0xFF){
+//      					updateData(i);
+//      					state_machine(i);	
+//      				}
+//      				//no tag found, add in this new tag
+//      				else if(i == current_num_tags){
+//      					if(current_num_tags < NUM_TAGS){
+//      						addNewTag(i);
+//      						current_num_tags++;	
+//      					}	
+//      				}
+//      			}
+//      		
+//      	}
 
         //reset timeout
         timeout_counter = 0;
@@ -381,7 +382,7 @@ void addNewTag(int i){
    tag newTag;
    newTag.EPCHeaderName = EPCHeader;
    newTag.fertigate     = EPCFertigate;
-   newTag.threshold     = MAX_VALUE;
+   newTag.threshold     = MIN_VALUE;
    newTag.state         = COMPARE_THRESHOLD;
    
    tag_array[i] = newTag;
@@ -401,18 +402,21 @@ void updateData(int i){
 //the GPIO
 void turnOnRelay(){
 	digitalWrite(RELAY_SWITCH, HIGH);
-	delay(200);
-	digitalWrite(RELAY_SWITCH, LOW);	
 }
 
-void readFertigateSwitch(){
-	if(digitalRead(FERTIGATE_SWITCH) == HIGH){
-		fertigate_state = 1;	
-	}
-	else{
-		fertigate_state = 0;	
-	}
+void turnOffRelay(){
+	digitalWrite(RELAY_SWITCH, LOW);
+	
 }
+
+//void readFertigateSwitch(){
+//	if(digitalRead(FERTIGATE_SWITCH) == HIGH){
+//		fertigate_state = 1;	
+//	}
+//	else{
+//		fertigate_state = 0;	
+//	}
+//}
 
 //Irrigation state machine with three states: compare the threshold
 //wet cycle (for continuous watering until low threshold is met), and dry cycle
@@ -452,6 +456,8 @@ void state_machine(int index){
       if(_debug_serial){
          Serial.print("EPC Tag: ");
          Serial.print(tag_array[index].EPCHeaderName, HEX);
+         Serial.print(" Current RSSI: ");
+         Serial.print(tag_array[index].rssi);
          Serial.print(" WET_CYCLE state ");
          Serial.print("Current moisture: ");
          Serial.print(tag_array[index].moisture);
@@ -461,12 +467,17 @@ void state_machine(int index){
       }
      
        if(tag_array[index].moisture > tag_array[index].threshold){
-          turnOnRelay();
-          tag_array[index].state = COMPARE_THRESHOLD;
+       	 if(tag_array[index].rssi > RELAY_RSSI_THRESHOLD){
+          	turnOnRelay();
+          	tag_array[index].state = COMPARE_THRESHOLD;
+       	 }
+       	 else
+       	 	turnOffRelay();
        }
        else if(tag_array[index].moisture <= tag_array[index].threshold){
           tag_array[index].threshold = MAX_VALUE;
           tag_array[index].state = COMPARE_THRESHOLD;
+          turnOffRelay();
        }
 
        break;
@@ -476,6 +487,8 @@ void state_machine(int index){
         if(_debug_serial){
            Serial.print("EPC Tag: ");
            Serial.print(tag_array[index].EPCHeaderName, HEX);
+           Serial.print(" Current RSSI: ");
+           Serial.print(tag_array[index].rssi);
            Serial.print(" DRY_CYCLE state ");
            Serial.print("Current moisture: ");
            Serial.print(tag_array[index].moisture);
@@ -485,12 +498,17 @@ void state_machine(int index){
         }
      
         if(tag_array[index].moisture > tag_array[index].threshold){
-          tag_array[index].threshold = MIN_VALUE;
-          turnOnRelay();
-          tag_array[index].state = COMPARE_THRESHOLD;
+        	  if(tag_array[index].rssi > RELAY_RSSI_THRESHOLD){
+        	  		tag_array[index].threshold = MIN_VALUE;
+          		turnOnRelay();
+          		tag_array[index].state = COMPARE_THRESHOLD;
+        	  	
+        	  }
+          
         }
         else if(tag_array[index].moisture <= tag_array[index].threshold){
           tag_array[index].state = COMPARE_THRESHOLD;
+          turnOffRelay();
         }
   }
 }
